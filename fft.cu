@@ -1,54 +1,75 @@
 // Include header files
 #include <bits/stdc++.h>
 #include <cuda.h>
+#include <cmath>
 
 #define ll long long int
 
-const complex<double> J(0, 1);
+// const complex<double> J(0, 1);
+// Maybe use float2 instead of complex?
+// we can use static inline functions for addition, multiplication and inverse of complex numbers
+typedef float2 Complex;
+
+const int THREADS = 32;
+const long long ARRAY_SIZE = 1024;
+const long long ARRAY_BYTES = ARRAY_SIZE * sizeof(Complex);
+
+__global__ void bit_reverse_reorder (Complex *d_rev, Complex *d_a, int s){
+    int id = (blockIdx.x * blockDim.x) + threadIdx.x;
+    int rev = __brev(id) >> (32-s);
+    if (id < ARRAY_SIZE)
+        d_rev[rev] = d_a[id];
+}
 
 using namespace std;
 
 // wave_to_sample
-
-vector<complex<double>> reverse_bits(vector<complex<double>> a)
-{
-    double temp;
-    vector<complex<double>> a_rev;
-    for(ll i = 0; i < a.size(); i++)
-    {
-        if(a[i].real == 0)
-        {
-            a_rev[i].real = 0;
-            continue;
-        }
-        a_rev[i].real = 1;
-        if(a[i].imag == 0)
-        {
-            a_rev[i].imag = 0;
-            continue;
-        }
-        a_rev[i].imag = 1;
-        for(ll k = 0; k < log2(a[i].real); i++)
-        {
-            a_rev[i].real = a_rev[i].real*2 + a[i].real%2;
-            a[i].real = a[i].real/2;
-        }
-        for(ll k = 0; k < log2(a[i].imag); i++)
-        {
-            a_rev[i].imag = a_rev[i].imag*2 + a[i].imag%2;
-            a[i].imag = a[i].imag/2;
-        }
+ll bit_reverse_host(ll n, int s){
+    ll rev = 0;
+    count = s;
+    while(n){
+        rev <<= 1;
+        rev |= (n&1);
+        n >>= 1;
+        count--;
     }
-    return(a_rev);
+    rev <<= count;
+    return rev;
 }
 
-void fft(vector<complex<double>> &a)
+Complex* reverse_bits(Complex *a, int s) {
+    Complex *a_rev;
+    for (int i=0;i<a.size();i++){
+        a_rev[bit_reverse_host(i,s)] = a[i];
+    }
+    return a_rev;
+}
+
+void fft(Complex *a)
 {
     ll n = a.size();
+
+    // DOUBT:
+    // isn't the algo the following:
+    // for(s=1 to log2(n)){
+    //     w_m = exp(-2pi*j/m)
+    //     for(j=0;j<n;j+=m){
+    //          w = 1;
+    //          for(k=0 to m/2-1){
+    //              t = w * a[j+k+m/2];
+    //              u = a[j+k];
+    //              a[j+k] = u+t;              
+    //              a[j+k+m/2] = u-t;
+    //              w *= w_m;
+    //          }
+    //     }           
+    // }
+
     for(ll s = 1; s < log2(n); s++)
     {
         ll m = pow(2,s);
 
+        // Make changes here
         complex<double> w(1,0);
 
         complex<double> wm = exp(J * 2 * M_1_PI/ m);
@@ -70,15 +91,30 @@ void fft(vector<complex<double>> &a)
 
 int main(int argc, char *argv[]) {
     
-    vector<complex<double>> sample;
-    // TODO 
-    // Implement a function wave_to_sample
-    // Return it to vector samples
+    // brev_sample = reverse_bits(sample);
 
-    vector<complex<double>> brev_sample;
-    // TODO
-    // Call brev to reverse the bits
-    brev_sample = reverse_bits(sample);
+    //Creating Complex arrays for data 
+    Complex *h_a, *h_rev; 
+    Complex *d_a, *d_rev;
+
+    for(int i = 0; i < ARRAY_SIZE; i++) {
+    	h_a[i].x = sin((10*M_PI*i)/ARRAY_SIZE);
+        h_a[i].y = 0.0;
+    }
+    	
+    int s = (int)ceil(log2(ARRAY_SIZE));
+
+    cudaMalloc((void**) &d_a, ARRAY_BYTES);
+    cudaMalloc((void**) &d_rev, ARRAY_BYTES);
+
+    cudaMemcpy(d_a, h_a, ARRAY_BYTES, cudaMemcpyHostToDevice);
+
+    bit_reverse_reorder<<<(int)ceil(ARRAY_SIZE/THREADS), THREADS>>>(d_rev, d_a, s);
+
+    cudaMemcpy(h_rev, d_rev, ARRAY_BYTES, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_a);
+    cudaFree(d_rev);
 
     // TODO
     // Parallelise FFT function
