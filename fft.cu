@@ -26,7 +26,7 @@ using namespace std;
 // wave_to_sample
 ll bit_reverse_host(ll n, int s){
     ll rev = 0;
-    count = s;
+    ll count = s;
     while(n){
         rev <<= 1;
         rev |= (n&1);
@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
     // brev_sample = reverse_bits(sample);
 
     //Creating Complex arrays for data 
-    Complex *h_a, *h_rev; 
+    Complex h_a[ARRAY_SIZE], h_rev[ARRAY_SIZE]; 
     Complex *d_a, *d_rev;
 
     for(int i = 0; i < ARRAY_SIZE; i++) {
