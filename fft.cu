@@ -5,15 +5,13 @@
 
 #define ll long long int
 
-// const complex<double> J(0, 1);
-// Maybe use float2 instead of complex?
-// we can use static inline functions for addition, multiplication and inverse of complex numbers
 typedef float2 Complex;
 
 const int THREADS = 32;
 const long long ARRAY_SIZE = 1024;
 const long long ARRAY_BYTES = ARRAY_SIZE * sizeof(Complex);
 
+// Parallelized reordering (Doesn't this count as pre-processing?)
 __global__ void bit_reverse_reorder (Complex *d_rev, Complex *d_a, int s){
     int id = (blockIdx.x * blockDim.x) + threadIdx.x;
     int rev = __brev(id) >> (32-s);
@@ -21,104 +19,89 @@ __global__ void bit_reverse_reorder (Complex *d_rev, Complex *d_a, int s){
         d_rev[rev] = d_a[id];
 }
 
-using namespace std;
+// FFT driver kernel code
+__global__ void fft(Complex *a, int j, int m){
+    int k = blockIdx.x * blockDim.x + threadIdx.x;
 
-// wave_to_sample
-ll bit_reverse_host(ll n, int s){
-    ll rev = 0;
-    ll count = s;
-    while(n){
-        rev <<= 1;
-        rev |= (n&1);
-        n >>= 1;
-        count--;
-    }
-    rev <<= count;
-    return rev;
-}
+    if(j+k+m/2 < ARRAY_SIZE){
+        
+        Complex w, t, u;
 
-Complex* reverse_bits(Complex *a, int s) {
-    Complex *a_rev;
-    for (int i=0;i<a.size();i++){
-        a_rev[bit_reverse_host(i,s)] = a[i];
-    }
-    return a_rev;
-}
+        // w^k (w is root of unity)
+        w.x = __cosf((2*M_PI*k)/m);
+        w.y = -__sinf((2*M_PI*k)/m);
 
-void fft(Complex *a)
-{
-    ll n = a.size();
+        // u = a[j+k]
+        u.x = a[j+k].x;
+        u.y = a[j+k].y;
 
-    // DOUBT:
-    // isn't the algo the following:
-    // for(s=1 to log2(n)){
-    //     w_m = exp(-2pi*j/m)
-    //     for(j=0;j<n;j+=m){
-    //          w = 1;
-    //          for(k=0 to m/2-1){
-    //              t = w * a[j+k+m/2];
-    //              u = a[j+k];
-    //              a[j+k] = u+t;              
-    //              a[j+k+m/2] = u-t;
-    //              w *= w_m;
-    //          }
-    //     }           
-    // }
+        // t = w*a[j+k+m/2];
+        t.x = w.x*a[j+k+m/2].x - w.y*a[j+k+m/2].y;
+        t.y = w.x*a[j+k+m/2].y + w.y*a[j+k+m/2].x;
 
-    for(ll s = 1; s < log2(n); s++)
-    {
-        ll m = pow(2,s);
+        // a[j+k] = u+t;
+        a[j+k].x = u.x + t.x;
+        a[j+k].y = u.y + t.y;
 
-        // Make changes here
-        complex<double> w(1,0);
+        // a[j+k+m/2] = u-t;
+        a[j+k+m/2].x = u.x - t.x;
+        a[j+k+m/2].y = u.y - t.y;
 
-        complex<double> wm = exp(J * 2 * M_1_PI/ m);
-
-        for(ll i = 0; i < m/2; i++)
-        {
-            for(ll k = i; k < n; k+=m)
-            {
-                complex<double> t = w * a[k + m/2];
-                complex<double> u = a[k];
-
-                a[k] = u + t;
-                a[k+m/2] = u - t;
-            }
-            w = w * wm;
-        }
     }
 }
 
 int main(int argc, char *argv[]) {
-    
-    // brev_sample = reverse_bits(sample);
 
     //Creating Complex arrays for data 
     Complex h_a[ARRAY_SIZE], h_rev[ARRAY_SIZE]; 
     Complex *d_a, *d_rev;
 
+    // Input signal (of the form sin((2*M_PI*f*x)/N)) where N is the sample size
+    // imaginary part of the signal by default is 0
     for(int i = 0; i < ARRAY_SIZE; i++) {
     	h_a[i].x = sin((10*M_PI*i)/ARRAY_SIZE);
         h_a[i].y = 0.0;
     }
-    	
+        
+    // No. of bits in the sample size, used for bit reversal reordering
     int s = (int)ceil(log2(ARRAY_SIZE));
 
+    //Allocate memory for the device arrays
     cudaMalloc((void**) &d_a, ARRAY_BYTES);
     cudaMalloc((void**) &d_rev, ARRAY_BYTES);
 
+    //Copy all elements of sample array from host to device
     cudaMemcpy(d_a, h_a, ARRAY_BYTES, cudaMemcpyHostToDevice);
 
+    //Reorder the sample as first step of FFT
     bit_reverse_reorder<<<(int)ceil(ARRAY_SIZE/THREADS), THREADS>>>(d_rev, d_a, s);
 
+    //Synchronise devices before jumping to fft
+    cudaDeviceSynchronize();
+
+    // Naive fft parallelization (TODO: improve upon the efficiency and make algo scalable)
+    for (int i=0;i<=s;i++){
+
+        int m = 1 << i;
+        
+        for(int j=0;j<ARRAY_SIZE;j+=m){
+
+            // TODO
+            // make code scalable to ARRAY_SIZE larger than 2048
+
+            // Performing in-place fft
+            fft<<<1,m/2>>>(d_rev,j,m);    
+        
+        }    
+    }
+
+    // Copy result array to host
     cudaMemcpy(h_rev, d_rev, ARRAY_BYTES, cudaMemcpyDeviceToHost);
 
+    // Free device memory
     cudaFree(d_a);
     cudaFree(d_rev);
-
-    // TODO
-    // Parallelise FFT function
     
-    fft(brev_sample);
-
+    // TODO
+    // Use h_rev to plot magnitude (sqrt(h_rev[i].x^2 + h_rev[i].y^2)) vs frequency (i)
 }
