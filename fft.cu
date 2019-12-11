@@ -4,10 +4,10 @@
 #include <cmath>
 
 #define ll long long int
+#define THREADS 32
 
 typedef float2 Complex;
 
-const int THREADS = 32;
 const long long ARRAY_SIZE = 1024;
 const long long ARRAY_BYTES = ARRAY_SIZE * sizeof(Complex);
 
@@ -23,7 +23,7 @@ __global__ void bit_reverse_reorder (Complex *d_rev, Complex *d_a, int s){
 __global__ void fft(Complex *a, int j, int m){
     int k = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if(j+k+m/2 < ARRAY_SIZE){
+    if(k < m/2 && j+k+m/2 < ARRAY_SIZE){
         
         Complex w, t, u;
 
@@ -74,23 +74,20 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(d_a, h_a, ARRAY_BYTES, cudaMemcpyHostToDevice);
 
     //Reorder the sample as first step of FFT
-    bit_reverse_reorder<<<(int)ceil(ARRAY_SIZE/THREADS), THREADS>>>(d_rev, d_a, s);
+    bit_reverse_reorder<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev, d_a, s);
 
     //Synchronise devices before jumping to fft
     cudaDeviceSynchronize();
 
-    // Naive fft parallelization (TODO: improve upon the efficiency and make algo scalable)
+    // Naive fft parallelization (TODO: improve upon the efficiency)
     for (int i=0;i<=s;i++){
 
         int m = 1 << i;
         
         for(int j=0;j<ARRAY_SIZE;j+=m){
 
-            // TODO
-            // make code scalable to ARRAY_SIZE larger than 2048
-
             // Performing in-place fft
-            fft<<<1,m/2>>>(d_rev,j,m);    
+            fft<<<((m/2)+THREADS-1)/THREADS,THREADS>>>(d_rev,j,m);    
         
         }    
     }
