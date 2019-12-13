@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include<unistd.h> 
 
 #ifndef M_PI
     #define M_PI 3.14159265358979323846
@@ -71,6 +72,12 @@ void fft(Complex *a, int s){
 }
 
 void main(){
+    FILE *fptr;
+    fptr = fopen("fft-serialized-output.dat", "wr");
+    if (fptr == NULL) {
+        printf("Error!");
+        exit(1);
+    }
     Complex *a, *rev;
     int s = (int)ceil(log2(ARRAY_SIZE));
     a = (Complex *)malloc(ARRAY_BYTES);
@@ -81,5 +88,11 @@ void main(){
     }
     bit_reverse_reorder(a,rev,s);
     fft(rev,s);
-    printf ("%f %f %f %f\n",rev[6].re, rev[6].im, rev[ARRAY_SIZE-6].re, rev[ARRAY_SIZE-6].im);
+    fprintf(fptr, "i\t\trev.real\t\trev.img\t\ta.real\t\ta.img\n");
+    for (int i = 0; i < ARRAY_SIZE; i++)
+    {
+        fprintf(fptr,"%d\t\t%f\t\t%f\t\t%f\t\t%f\n", i, rev[i].re, rev[i].im, a[i].re, a[i].im);
+    }
+    
+    // printf ("%f %f %f %f\n",rev[6].re, rev[6].im, rev[ARRAY_SIZE-6].re, rev[ARRAY_SIZE-6].im);
 }

@@ -51,6 +51,9 @@ __global__ void fft(Complex *a, int j, int m){
 }
 
 int main(int argc, char *argv[]) {
+    // Creating files to write output to
+    FILE *fptr;
+    fptr = fopen("fft-output.dat", "wr");
 
     //Creating Complex arrays for data 
     Complex h_a[ARRAY_SIZE], h_rev[ARRAY_SIZE]; 
@@ -94,6 +97,13 @@ int main(int argc, char *argv[]) {
 
     // Copy result array to host
     cudaMemcpy(h_rev, d_rev, ARRAY_BYTES, cudaMemcpyDeviceToHost);
+
+    // Writing output to files
+    fprintf(fptr, "i\t\ta.real\t\t\ta.img\n");
+    for (int i = 0; i < ARRAY_SIZE; i++)
+    {
+        fprintf(fptr,"%d\t\t%f\t\t%f\n", i, h_rev[i].x, h_rev[i].y);
+    }
 
     // Free device memory
     cudaFree(d_a);
