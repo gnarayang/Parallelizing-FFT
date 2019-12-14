@@ -50,6 +50,11 @@ __global__ void fft(Complex *a, int j, int m){
     }
 }
 
+float magnitude(float2 a)
+{
+    return sqrt(a.x*a.x + a.y*a.y);
+}
+
 int main(int argc, char *argv[]) {
     // Creating files to write output to
     FILE *fptr;
@@ -99,10 +104,10 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(h_rev, d_rev, ARRAY_BYTES, cudaMemcpyDeviceToHost);
 
     // Writing output to files
-    fprintf(fptr, "i\t\ta.real\t\t\ta.img\n");
+    fprintf(fptr, "i\t\ta.magn\t\ta.real\t\t\ta.img\n");
     for (int i = 0; i < ARRAY_SIZE; i++)
     {
-        fprintf(fptr,"%d\t\t%f\t\t%f\n", i, h_rev[i].x, h_rev[i].y);
+        fprintf(fptr,"%d\t\t%f\t\t%f\t\t%f\n", i, magnitude(h_rev[i]), h_rev[i].x, h_rev[i].y);
     }
 
     // Free device memory

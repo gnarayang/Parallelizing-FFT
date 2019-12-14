@@ -71,6 +71,11 @@ void fft(Complex *a, int s){
     }
 }
 
+float magnitude(Complex a)
+{
+    return sqrt(a.re*a.re + a.im*a.im);
+}
+
 void main(){
     FILE *fptr;
     fptr = fopen("fft-serialized-output.dat", "wr");
@@ -88,10 +93,10 @@ void main(){
     }
     bit_reverse_reorder(a,rev,s);
     fft(rev,s);
-    fprintf(fptr, "i\t\trev.real\t\trev.img\t\ta.real\t\ta.img\n");
+    fprintf(fptr, "i\t\trev.magn\t\trev.real\t\trev.img\t\ta.magn\t\ta.real\t\ta.img\n");
     for (int i = 0; i < ARRAY_SIZE; i++)
     {
-        fprintf(fptr,"%d\t\t%f\t\t%f\t\t%f\t\t%f\n", i, rev[i].re, rev[i].im, a[i].re, a[i].im);
+        fprintf(fptr,"%d\t\t%f\t\t%f\t\t%f\t\t%f\t\t%f\t\t%f\n", i, magnitude(rev[i]), rev[i].re, rev[i].im, magnitude(a[i]), a[i].re, a[i].im);
     }
     
     // printf ("%f %f %f %f\n",rev[6].re, rev[6].im, rev[ARRAY_SIZE-6].re, rev[ARRAY_SIZE-6].im);
