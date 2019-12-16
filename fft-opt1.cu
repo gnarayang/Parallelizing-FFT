@@ -91,7 +91,15 @@ __global__ void fft_inner(Complex *a, int j, int m){
         inplace_fft(a,j,k,m);
 }
 
+float magnitude(float2 a)
+{
+    return sqrt(a.x*a.x + a.y*a.y);
+}
+
 int main() {
+    // Creating files to write output to
+    FILE *fptr;
+    fptr = fopen("fft-opt1-output.dat", "wr");
 
     // Host arrays for input and output
     Complex h_a[ARRAY_SIZE];
@@ -147,6 +155,13 @@ int main() {
 
     // Copy result array from device to host
     cudaMemcpy(h_rev,d_rev,ARRAY_BYTES,cudaMemcpyDeviceToHost);
+
+    // Writing output to files
+    fprintf(fptr, "i\t\ta.magn\t\ta.real\t\t\ta.img\n");
+    for (int i = 0; i < ARRAY_SIZE; i++)
+    {
+        fprintf(fptr,"%d\t\t%f\t\t%f\t\t%f\n", i, magnitude(h_rev[i]), h_rev[i].x, h_rev[i].y);
+    }
 
     // Free allocated device memory
     cudaFree(d_a);
