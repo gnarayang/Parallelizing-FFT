@@ -112,9 +112,6 @@ int main(int argc, char *argv[]) {
     //End of performance measurement
     cudaEventRecord(stop);
 
-    // Copy result array to host
-    cudaMemcpy(h_rev, d_rev, ARRAY_BYTES, cudaMemcpyDeviceToHost);
-
     //Block CPU execution until the event "stop" is recorded
     cudaEventSynchronize(stop);
 
