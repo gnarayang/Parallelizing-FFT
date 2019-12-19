@@ -8,6 +8,7 @@ Note that origin will be the forked repository while upstream will be this repos
 git remote add upstream https://github.com/IEEE-NITK/Parallelizing-FFT.git
 git fetch upstream
 git checkout -b <branch_name>
+git pull upstream development
 // Make your changes here
 git add <file_name>
 git commit -m "<Appropriate Message>"
