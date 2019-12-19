@@ -1,13 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include<unistd.h> 
+#include <unistd.h> 
+#include <time.h>
 
 #ifndef M_PI
     #define M_PI 3.14159265358979323846
 #endif
 
-#define ARRAY_SIZE 65536
+#define ARRAY_SIZE 131072
 
 typedef struct Complex{
     float re,im;
@@ -77,6 +78,7 @@ float magnitude(Complex a)
 }
 
 void main(){
+    clock_t start, end;
     FILE *fptr;
     fptr = fopen("fft-serialized-output.dat", "wr");
     if (fptr == NULL) {
@@ -91,8 +93,12 @@ void main(){
         a[i].re = sinf((12*M_PI*i)/ARRAY_SIZE);
         a[i].im = 0;
     }
+    start = clock();
     bit_reverse_reorder(a,rev,s);
     fft(rev,s);
+    end = clock();
+    double time = ((double)(end - start))/1000;
+    printf("Time in ms: %lf\n", (double)time);
     fprintf(fptr, "i\t\trev.magn\t\trev.real\t\trev.img\t\ta.magn\t\ta.real\t\ta.img\n");
     for (int i = 0; i < ARRAY_SIZE; i++)
     {
