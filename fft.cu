@@ -56,6 +56,12 @@ float magnitude(float2 a)
 }
 
 int main(int argc, char *argv[]) {
+
+    //Measuring performance
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     // Creating files to write output to
     FILE *fptr;
     fptr = fopen("fft-output.dat", "wr");
@@ -81,6 +87,9 @@ int main(int argc, char *argv[]) {
     //Copy all elements of sample array from host to device
     cudaMemcpy(d_a, h_a, ARRAY_BYTES, cudaMemcpyHostToDevice);
 
+    //Start of performance measurement
+    cudaEventRecord(start);
+
     //Reorder the sample as first step of FFT
     bit_reverse_reorder<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev, d_a, s);
 
@@ -99,6 +108,20 @@ int main(int argc, char *argv[]) {
         
         }    
     }
+
+    //End of performance measurement
+    cudaEventRecord(stop);
+
+    // Copy result array to host
+    cudaMemcpy(h_rev, d_rev, ARRAY_BYTES, cudaMemcpyDeviceToHost);
+
+    //Block CPU execution until the event "stop" is recorded
+    cudaEventSynchronize(stop);
+
+    //Print the time taken in milliseconds.
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    printf("The total time taken is %f milliseconds\n", milliseconds);
 
     // Copy result array to host
     cudaMemcpy(h_rev, d_rev, ARRAY_BYTES, cudaMemcpyDeviceToHost);
