@@ -76,8 +76,33 @@ float magnitude(float2 a)
     return sqrt(a.x*a.x + a.y*a.y);
 }
 
-int main() 
+int to_int(char str[])
 {
+    int cut_off_frequency = 0;
+    int i = 0;
+    while(str[i] != '\0')
+    {
+        cut_off_frequency += str[i] - 48;
+        cut_off_frequency *= 10;
+
+        i++;
+    }
+
+    return cut_off_frequency/10;
+}
+
+int main(int argc, char *argv[]) 
+{
+    int cut_off_frequency;
+
+    if(argc >= 2)
+        cut_off_frequency = to_int(argv[1]);
+    
+    else
+        cut_off_frequency = 1000;
+
+    // printf("%d\n", cut_off_frequency);
+    
 
     //Measuring performance
     cudaEvent_t start, stop;
