@@ -29,7 +29,7 @@ __global__ void swap_real_and_imaginary(Complex *d_rev, long long ARRAY_SIZE) {
 
 __global__ void clip(Complex *d_rev, long long cut_off_frequency, long long ARRAY_SIZE) {
     int id = blockIdx.x * blockDim.x + threadIdx.x;
-    if (id > cut_off_frequency && id < (ARRAY_SIZE - cut_off_frequency)) {
+    if (id >= cut_off_frequency && id <= (ARRAY_SIZE - cut_off_frequency)) {
         d_rev[id].x = 0.0f;
         d_rev[id].y = 0.0f;
     }
