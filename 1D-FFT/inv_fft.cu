@@ -27,6 +27,14 @@ __global__ void swap_real_and_imaginary(Complex *d_rev, long long ARRAY_SIZE) {
     }
 }
 
+__global__ void clip(Complex *d_rev, long long cut_off_frequency, long long ARRAY_SIZE) {
+    int id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (id >= cut_off_frequency && id <= (ARRAY_SIZE - cut_off_frequency)) {
+        d_rev[id].x = 0.0f;
+        d_rev[id].y = 0.0f;
+    }
+}
+
 __device__ void inplace_fft(Complex *a, int j, int k, int m, long long ARRAY_SIZE){
     
     if (j+k+m/2 < ARRAY_SIZE){
@@ -128,8 +136,8 @@ int main(int argc, char *argv[])
     fptr = fopen("../utils/fft-opt1-output.dat", "wr");
     output = fopen("../utils/convert_to_wav.dat", "wr");
     
-    Complex h_a[ARRAY_SIZE];
-    Complex h_rev[ARRAY_SIZE];
+    Complex *h_a = (Complex *)malloc(ARRAY_BYTES);
+    Complex *h_rev = (Complex *)malloc(ARRAY_BYTES);
 
     for(int i = 0; i < ARRAY_SIZE; i++) 
     {
@@ -168,6 +176,9 @@ int main(int argc, char *argv[])
     }
 
     cudaDeviceSynchronize();
+
+    // Clipping
+    clip<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev, cut_off_frequency, ARRAY_SIZE);
 
     // Beginning of inverse FFT
 
