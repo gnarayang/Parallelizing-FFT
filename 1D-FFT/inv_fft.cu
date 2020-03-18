@@ -234,7 +234,7 @@ int main(int argc, char *argv[])
     fprintf(fptr, "i\t\ta.magn\t\ta.real\t\t\ta.img\n");
     for (int i = 0; i < ARRAY_SIZE; i++)
     {
-        fprintf(output, "%Ld\n", (long long)h_rev[i].x/ARRAY_SIZE);
+        fprintf(output, "%Ld\n", (long long)h_rev[i].x*2/ARRAY_SIZE);
         fprintf(fptr,"%d\t\t%f\t\t%f\t\t%f\n", i, magnitude(h_rev[i])/ARRAY_SIZE, h_rev[i].x/ARRAY_SIZE, h_rev[i].y/ARRAY_SIZE);
     }
 
