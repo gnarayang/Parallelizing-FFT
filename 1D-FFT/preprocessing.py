@@ -3,7 +3,6 @@ import numpy
 from scipy.io import wavfile
 
 argument = sys.argv
-print sys.argv[1]
 fs, data = wavfile.read(str(sys.argv[1]))
 
 file1 = open("../utils/input.dat", "w+")

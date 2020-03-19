@@ -10,6 +10,21 @@ typedef float2 Complex;
 long long ARRAY_SIZE; 
 long long ARRAY_BYTES;
 
+int to_int(char str[])
+{
+    int cut_off_frequency = 0;
+    int i = 0;
+    while(str[i] != '\0')
+    {
+        cut_off_frequency += str[i] - 48;
+        cut_off_frequency *= 10;
+
+        i++;
+    }
+
+    return cut_off_frequency/10;
+}
+
 __global__ void bit_reverse_reorder(Complex *d_rev, Complex *d_a, int s, long long ARRAY_SIZE) {
 	int id = blockIdx.x * blockDim.x + threadIdx.x;
     int rev = __brev(id) >> (32-s);
@@ -24,14 +39,6 @@ __global__ void swap_real_and_imaginary(Complex *d_rev, long long ARRAY_SIZE) {
         float temp = d_rev[id].x;
         d_rev[id].x = d_rev[id].y;
         d_rev[id].y = temp;
-    }
-}
-
-__global__ void clip(Complex *d_rev, long long cut_off_frequency, long long ARRAY_SIZE) {
-    int id = blockIdx.x * blockDim.x + threadIdx.x;
-    if (id >= cut_off_frequency && id <= (ARRAY_SIZE - cut_off_frequency)) {
-        d_rev[id].x = 0.0f;
-        d_rev[id].y = 0.0f;
     }
 }
 
@@ -79,36 +86,89 @@ __global__ void fft_inner(Complex *a, int j, int m, long long ARRAY_SIZE){
         inplace_fft(a,j,k,m,ARRAY_SIZE);
 }
 
+__global__ void clip_higher_frequency(Complex *d_rev, long long cut_off_frequency, long long ARRAY_SIZE) {
+    int id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (id >= cut_off_frequency && id <= (ARRAY_SIZE - cut_off_frequency)) {
+        d_rev[id].x = 0.0f;
+        d_rev[id].y = 0.0f;
+    }
+}
+
+__global__ void clip_lower_frequency(Complex *d_rev, long long cut_off_frequency, long long ARRAY_SIZE) {
+    int id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (id <= cut_off_frequency || id >= (ARRAY_SIZE - cut_off_frequency)) {
+        d_rev[id].x = 0.0f;
+        d_rev[id].y = 0.0f;
+    }
+}
+
 float magnitude(float2 a)
 {
     return sqrt(a.x*a.x + a.y*a.y);
 }
 
-int to_int(char str[])
+void fft(Complex *d_a, Complex *d_rev, int s)
 {
-    int cut_off_frequency = 0;
-    int i = 0;
-    while(str[i] != '\0')
-    {
-        cut_off_frequency += str[i] - 48;
-        cut_off_frequency *= 10;
+    bit_reverse_reorder<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev, d_a, s, ARRAY_SIZE);
+    
+    cudaDeviceSynchronize();
 
-        i++;
+    for (int i=1;i<=s;i++){
+        int m = 1 << i;
+        if (m/2 < MAX_NO_OF_THREADS_PER_BLOCK){
+            fft_outer<<<((ARRAY_SIZE/m)+THREADS-1)/THREADS,THREADS>>>(d_rev,m,ARRAY_SIZE);
+        } else {
+            for (int j=0;j<ARRAY_SIZE;j+=m){
+                fft_inner<<<((m/2)+THREADS-1)/THREADS,THREADS>>>(d_rev,j,m,ARRAY_SIZE);
+            }
+        }
     }
 
-    return cut_off_frequency/10;
+    cudaDeviceSynchronize();
+}
+
+void inv_fft(Complex *d_rev, Complex *d_rev1, int s)
+{
+    swap_real_and_imaginary<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev, ARRAY_SIZE);
+
+    cudaDeviceSynchronize();
+
+    bit_reverse_reorder<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev1, d_rev, s, ARRAY_SIZE);
+
+    cudaDeviceSynchronize();
+    
+    for (int i=1;i<=s;i++)
+    {
+        int m = 1 << i;
+        if (m < sqrt(ARRAY_SIZE / 4))
+        {
+            fft_outer<<<((ARRAY_SIZE/m)+THREADS-1)/THREADS,THREADS>>>(d_rev1,m,ARRAY_SIZE);
+        } 
+        else 
+        {
+            for (int j=0;j<ARRAY_SIZE;j+=m)
+            {
+                fft_inner<<<((m/2)+THREADS-1)/THREADS,THREADS>>>(d_rev1,j,m,ARRAY_SIZE);
+            }
+        }
+    }
+
+    swap_real_and_imaginary<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev1, ARRAY_SIZE);
 }
 
 int main(int argc, char *argv[]) 
 {
-    int cut_off_frequency;
+    int cut_off_frequency = 1000;
+    char clip_condition = 'l';
 
-    if(argc >= 2)
-        cut_off_frequency = to_int(argv[1]);
-    
+    // Checking the low/high pass condition
+    if(argv[1][0] == 'l' || argv[1][0] == 'h')
+        clip_condition = argv[1][0];
     else
-        cut_off_frequency = 1000;
+        printf("%s should be either l or h indicating low or high pass filter\n", argv[1]);
 
+    // Setting the cut_off_frequency
+    cut_off_frequency = to_int(argv[2]);
     // printf("%d\n", cut_off_frequency);
     
 
@@ -123,8 +183,10 @@ int main(int argc, char *argv[])
 
     int fs;
 
+    // The sampling rate of the audio
     fscanf(input, "%d", &fs);
 
+    // The number of samples
     fscanf(input, "%Ld", &ARRAY_SIZE);
 
     ARRAY_BYTES = ARRAY_SIZE * sizeof(Complex);
@@ -160,53 +222,19 @@ int main(int argc, char *argv[])
     //Start of performance measurement
     cudaEventRecord(start);
 
-    bit_reverse_reorder<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev, d_a, s, ARRAY_SIZE);
-    
-    cudaDeviceSynchronize();
+    // FFT function
+    fft(d_a, d_rev, s);
 
-    for (int i=1;i<=s;i++){
-        int m = 1 << i;
-        if (m/2 < MAX_NO_OF_THREADS_PER_BLOCK){
-            fft_outer<<<((ARRAY_SIZE/m)+THREADS-1)/THREADS,THREADS>>>(d_rev,m,ARRAY_SIZE);
-        } else {
-            for (int j=0;j<ARRAY_SIZE;j+=m){
-                fft_inner<<<((m/2)+THREADS-1)/THREADS,THREADS>>>(d_rev,j,m,ARRAY_SIZE);
-            }
-        }
-    }
+    if(clip_condition == 'l')
+        // Low pass filter
+        clip_higher_frequency<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev, cut_off_frequency, ARRAY_SIZE);
 
-    cudaDeviceSynchronize();
+    if(clip_condition == 'h')
+        // High pass filter
+        clip_lower_frequency<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev, cut_off_frequency, ARRAY_SIZE);
 
-    // Clipping
-    clip<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev, cut_off_frequency, ARRAY_SIZE);
-
-    // Beginning of inverse FFT
-
-    swap_real_and_imaginary<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev, ARRAY_SIZE);
-
-    cudaDeviceSynchronize();
-
-    bit_reverse_reorder<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev1, d_rev, s, ARRAY_SIZE);
-
-    cudaDeviceSynchronize();
-    
-    for (int i=1;i<=s;i++)
-    {
-        int m = 1 << i;
-        if (m < sqrt(ARRAY_SIZE / 4))
-        {
-            fft_outer<<<((ARRAY_SIZE/m)+THREADS-1)/THREADS,THREADS>>>(d_rev1,m,ARRAY_SIZE);
-        } 
-        else 
-        {
-            for (int j=0;j<ARRAY_SIZE;j+=m)
-            {
-                fft_inner<<<((m/2)+THREADS-1)/THREADS,THREADS>>>(d_rev1,j,m,ARRAY_SIZE);
-            }
-        }
-    }
-
-    swap_real_and_imaginary<<<(ARRAY_SIZE+THREADS-1)/THREADS, THREADS>>>(d_rev1, ARRAY_SIZE);
+    // Beginning of inverse-FFT
+    inv_fft(d_rev, d_rev1, s);
 
     // End of performance measurement
     cudaEventRecord(stop);
@@ -217,7 +245,7 @@ int main(int argc, char *argv[])
     //Print the time taken in milliseconds
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("The total time taken is %f milliseconds\n", milliseconds);
+    printf("The total time taken by the FFT, clipping and inverse-FFT is %f milliseconds\n", milliseconds);
 
     cudaMemcpy(h_rev,d_rev1,ARRAY_BYTES,cudaMemcpyDeviceToHost);
 
